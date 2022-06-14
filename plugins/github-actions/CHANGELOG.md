@@ -1,5 +1,11 @@
 # @backstage/plugin-github-actions
 
+## 0.5.7-next.0
+
+### Patch Changes
+
+- 217f919f0a: Minor cleanup of the API surface.
+
 ## 0.5.6
 
 ### Patch Changes

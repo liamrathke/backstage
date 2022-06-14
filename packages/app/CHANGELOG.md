@@ -1,5 +1,13 @@
 # example-app
 
+## 0.2.73-next.0
+
+### Patch Changes
+
+- Updated dependencies
+  - @backstage/plugin-scaffolder@1.4.0-next.0
+  - @backstage/plugin-github-actions@0.5.7-next.0
+
 ## 0.2.72
 
 ### Patch Changes

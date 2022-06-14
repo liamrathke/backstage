@@ -158,5 +158,10 @@
     "@backstage/plugin-vault-backend": "0.1.0",
     "@backstage/plugin-xcmetrics": "0.2.26"
   },
-  "changesets": []
+  "changesets": [
+    "create-app-1655215220",
+    "eleven-mice-collect",
+    "polite-eagles-invite",
+    "wet-dolphins-act"
+  ]
 }
