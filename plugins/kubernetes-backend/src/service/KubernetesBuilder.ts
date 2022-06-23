@@ -16,14 +16,17 @@
 import { Config } from '@backstage/config';
 import express from 'express';
 import Router from 'express-promise-router';
+import fetch from 'node-fetch';
 import { Logger } from 'winston';
 import { Duration } from 'luxon';
 import { getCombinedClusterSupplier } from '../cluster-locator';
 import { MultiTenantServiceLocator } from '../service-locator/MultiTenantServiceLocator';
+import { KubernetesAuthTranslatorGenerator } from '../kubernetes-auth-translator/KubernetesAuthTranslatorGenerator';
 import {
   KubernetesObjectTypes,
   ServiceLocatorMethod,
   CustomResource,
+  ClusterDetails,
   KubernetesObjectsProvider,
   ObjectsByEntityRequest,
   KubernetesClustersSupplier,
@@ -31,6 +34,7 @@ import {
   KubernetesServiceLocator,
   KubernetesObjectsProviderOptions,
 } from '../types/types';
+import type { KubernetesRequestBody } from '@backstage/plugin-kubernetes-common';
 import { KubernetesClientProvider } from './KubernetesClientProvider';
 import {
   DEFAULT_OBJECTS,
@@ -45,6 +49,22 @@ import { KubernetesClientBasedFetcher } from './KubernetesFetcher';
 export interface KubernetesEnvironment {
   logger: Logger;
   config: Config;
+}
+
+export interface AuthMetadata {
+  google?: string;
+}
+
+enum RequestMethod {
+  Get = 'GET',
+  Post = 'POST',
+}
+
+export interface KubernetesProxyRequest {
+  method: RequestMethod;
+  cluster: string;
+  authMetadata: AuthMetadata;
+  encodedQuery: string;
 }
 
 /**
@@ -259,6 +279,43 @@ export class KubernetesBuilder {
         })),
       });
     });
+
+    router.get('/proxy/:encodedQuery', async (req, res) => {
+      const cluster = req.header('X-Kubernetes-Cluster') ?? '';
+      const authMetadata = JSON.parse(
+        req.header('X-Auth-Metadata') ?? '{}',
+      ) as AuthMetadata;
+      const encodedQuery = req.params.encodedQuery;
+
+      const proxyRequest: KubernetesProxyRequest = {
+        method: RequestMethod.Get,
+        cluster,
+        authMetadata,
+        encodedQuery,
+      };
+
+      const proxyResponse = await this.makeProxyRequest(proxyRequest);
+      res.send(proxyResponse);
+    });
+
+    router.post('/proxy/:encodedQuery', async (req, res) => {
+      const cluster = req.header('X-Kubernetes-Cluster') ?? '';
+      const authMetadata = JSON.parse(
+        req.header('X-Auth-Metadata') ?? '{}',
+      ) as AuthMetadata;
+      const encodedQuery = req.params.encodedQuery;
+
+      const proxyRequest: KubernetesProxyRequest = {
+        method: RequestMethod.Post,
+        cluster,
+        authMetadata,
+        encodedQuery,
+      };
+
+      const proxyResponse = await this.makeProxyRequest(proxyRequest);
+      res.send(proxyResponse);
+    });
+
     return router;
   }
 
@@ -308,5 +365,52 @@ export class KubernetesBuilder {
     }
 
     return objectTypesToFetch;
+  }
+
+  protected async makeProxyRequest(req: KubernetesProxyRequest): Promise<any> {
+    if (!this.clusterSupplier) {
+      // error
+      return null;
+    }
+
+    const clusterDetails = await this.fetchClusterDetails(this.clusterSupplier);
+    const details = clusterDetails.find(c => c.name === req.cluster);
+
+    if (!details) {
+      // error
+      return null;
+    }
+
+    const detailsWithAuth = await this.configureAuth(details, req.authMetadata);
+    const client = new KubernetesClientProvider().getKubeConfig(
+      detailsWithAuth,
+    );
+    client.loadFromDefault();
+
+    const decodedQuery = decodeURIComponent(req.encodedQuery);
+
+    const clientURI = `${client.getCurrentCluster()?.server}/${decodedQuery}`;
+
+    const res = await fetch(clientURI, {
+      method: req.method,
+    });
+    return res.json();
+  }
+
+  protected async configureAuth(
+    details: ClusterDetails,
+    authMetadata: AuthMetadata,
+  ): Promise<ClusterDetails> {
+    const options = {
+      logger: this.env.logger,
+    };
+    const authTranslator =
+      KubernetesAuthTranslatorGenerator.getKubernetesAuthTranslatorInstance(
+        details.authProvider,
+        options,
+      );
+    return authTranslator.decorateClusterDetailsWithAuth(details, {
+      auth: authMetadata,
+    } as KubernetesRequestBody);
   }
 }
