@@ -34,13 +34,15 @@ import {
   KubernetesServiceLocator,
   KubernetesObjectsProviderOptions,
 } from '../types/types';
-import type { KubernetesRequestBody } from '@backstage/plugin-kubernetes-common';
+import type { KubernetesRequestAuth } from '@backstage/plugin-kubernetes-common';
 import { KubernetesClientProvider } from './KubernetesClientProvider';
 import {
   DEFAULT_OBJECTS,
   KubernetesFanOutHandler,
 } from './KubernetesFanOutHandler';
 import { KubernetesClientBasedFetcher } from './KubernetesFetcher';
+
+import { KubeConfig } from '@kubernetes/client-node';
 
 /**
  *
@@ -51,10 +53,6 @@ export interface KubernetesEnvironment {
   config: Config;
 }
 
-export interface AuthMetadata {
-  google?: string;
-}
-
 enum RequestMethod {
   Get = 'GET',
   Post = 'POST',
@@ -63,7 +61,7 @@ enum RequestMethod {
 export interface KubernetesProxyRequest {
   method: RequestMethod;
   cluster: string;
-  authMetadata: AuthMetadata;
+  authMetadata: KubernetesRequestAuth;
   encodedQuery: string;
 }
 
@@ -284,7 +282,7 @@ export class KubernetesBuilder {
       const cluster = req.header('X-Kubernetes-Cluster') ?? '';
       const authMetadata = JSON.parse(
         req.header('X-Auth-Metadata') ?? '{}',
-      ) as AuthMetadata;
+      ) as KubernetesRequestAuth;
       const encodedQuery = req.params.encodedQuery;
 
       const proxyRequest: KubernetesProxyRequest = {
@@ -295,14 +293,14 @@ export class KubernetesBuilder {
       };
 
       const proxyResponse = await this.makeProxyRequest(proxyRequest);
-      res.send(proxyResponse);
+      res.json(proxyResponse);
     });
 
     router.post('/proxy/:encodedQuery', async (req, res) => {
       const cluster = req.header('X-Kubernetes-Cluster') ?? '';
       const authMetadata = JSON.parse(
         req.header('X-Auth-Metadata') ?? '{}',
-      ) as AuthMetadata;
+      ) as KubernetesRequestAuth;
       const encodedQuery = req.params.encodedQuery;
 
       const proxyRequest: KubernetesProxyRequest = {
@@ -313,7 +311,7 @@ export class KubernetesBuilder {
       };
 
       const proxyResponse = await this.makeProxyRequest(proxyRequest);
-      res.send(proxyResponse);
+      res.json(proxyResponse);
     });
 
     return router;
@@ -368,38 +366,103 @@ export class KubernetesBuilder {
   }
 
   protected async makeProxyRequest(req: KubernetesProxyRequest): Promise<any> {
-    if (!this.clusterSupplier) {
+    console.log('making proxy request');
+
+    const clusterSupplier =
+      this.clusterSupplier ??
+      this.buildClusterSupplier(this.defaultClusterRefreshInterval);
+    if (!clusterSupplier) {
       // error
+      this.env.logger.error('could not find cluster supplier!');
       return null;
     }
 
-    const clusterDetails = await this.fetchClusterDetails(this.clusterSupplier);
+    const clusterDetails = await this.fetchClusterDetails(clusterSupplier);
+    console.log('Cluster Details');
+    console.log(clusterDetails);
+    console.log(req.cluster);
     const details = clusterDetails.find(c => c.name === req.cluster);
+
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
     if (!details) {
       // error
+      this.env.logger.error('could not find cluster details!');
       return null;
     }
 
+    console.log('here1');
+
     const detailsWithAuth = await this.configureAuth(details, req.authMetadata);
-    const client = new KubernetesClientProvider().getKubeConfig(
-      detailsWithAuth,
-    );
-    client.loadFromDefault();
+    const client = this.getKubeConfig(detailsWithAuth);
+    console.log(client.users[0].token);
 
     const decodedQuery = decodeURIComponent(req.encodedQuery);
 
     const clientURI = `${client.getCurrentCluster()?.server}/${decodedQuery}`;
 
+    console.log(clientURI);
+
+    const oidcKeys = Object.keys(req.authMetadata.oidc || {});
+    console.log('OIDCKEYS!', oidcKeys);
+    if (oidcKeys.length < 1) {
+      // error
+      return null;
+    }
+    const bearerToken = req.authMetadata.oidc?.[oidcKeys[0]];
+    console.log('BEARER TOKEN!', bearerToken);
+
     const res = await fetch(clientURI, {
       method: req.method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${bearerToken}`,
+      },
     });
+
+    console.log(res.json);
+
     return res.json();
+  }
+
+  protected getKubeConfig(clusterDetails: ClusterDetails) {
+    const cluster = {
+      name: clusterDetails.name,
+      server: clusterDetails.url,
+      skipTLSVerify: clusterDetails.skipTLSVerify,
+      caData: clusterDetails.caData,
+    };
+
+    // TODO configure
+    const user = {
+      name: 'backstage',
+      token: clusterDetails.serviceAccountToken,
+    };
+
+    const context = {
+      name: `${clusterDetails.name}`,
+      user: user.name,
+      cluster: cluster.name,
+    };
+
+    const kc = new KubeConfig();
+    if (clusterDetails.serviceAccountToken) {
+      kc.loadFromOptions({
+        clusters: [cluster],
+        users: [user],
+        contexts: [context],
+        currentContext: context.name,
+      });
+    } else {
+      kc.loadFromDefault();
+    }
+
+    return kc;
   }
 
   protected async configureAuth(
     details: ClusterDetails,
-    authMetadata: AuthMetadata,
+    authMetadata: KubernetesRequestAuth,
   ): Promise<ClusterDetails> {
     const options = {
       logger: this.env.logger,
@@ -411,6 +474,6 @@ export class KubernetesBuilder {
       );
     return authTranslator.decorateClusterDetailsWithAuth(details, {
       auth: authMetadata,
-    } as KubernetesRequestBody);
+    } as KubernetesRequestAuth);
   }
 }
