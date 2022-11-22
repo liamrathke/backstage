@@ -18,7 +18,7 @@ import React from 'react';
 import { fireEvent } from '@testing-library/react';
 import { BarChart, BarChartProps } from './BarChart';
 import { ResourceData } from '../../types';
-import { createMockEntity } from '../../testUtils';
+import { createMockEntity, MockConfigProvider } from '../../testUtils';
 import { resourceSort } from '../../utils/sort';
 import { renderInTestApp } from '@backstage/test-utils';
 
@@ -46,15 +46,33 @@ const renderWithProps = ({
   resources = MockResources,
 }: BarChartProps) => {
   return renderInTestApp(
-    <BarChart
-      responsive={responsive}
-      displayAmount={displayAmount}
-      resources={resources}
-    />,
+    <MockConfigProvider>
+      <BarChart
+        responsive={responsive}
+        displayAmount={displayAmount}
+        resources={resources}
+      />
+    </MockConfigProvider>,
   );
 };
 
 describe('<BarChart />', () => {
+  const { ResizeObserver } = window;
+  beforeEach(() => {
+    // @ts-expect-error
+    delete window.ResizeObserver;
+    window.ResizeObserver = jest.fn().mockImplementation(() => ({
+      observe: jest.fn(),
+      unobserve: jest.fn(),
+      disconnect: jest.fn(),
+    }));
+  });
+
+  afterEach(() => {
+    window.ResizeObserver = ResizeObserver;
+    jest.restoreAllMocks();
+  });
+
   it('Renders without exploding', async () => {
     const rendered = await renderWithProps({} as BarChartProps);
     expect(rendered.getByText('test-id-10')).toBeInTheDocument();

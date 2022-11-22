@@ -153,6 +153,7 @@ import {
   TextSize,
   ReportIssue,
 } from '@backstage/plugin-techdocs-module-addons-contrib';
+import { EntityCostInsightsContent } from '@backstage/plugin-cost-insights';
 
 const customEntityFilterKind = ['Component', 'API', 'System'];
 
@@ -209,7 +210,7 @@ const techdocsContent = (
 /**
  * NOTE: This page is designed to work on small screens such as mobile devices.
  * This is based on Material UI Grid. If breakpoints are used, each grid item must set the `xs` prop to a column size or to `true`,
- * since this does not default. If no breakpoints are used, the items will equitably share the asvailable space.
+ * since this does not default. If no breakpoints are used, the items will equitably share the available space.
  * https://material-ui.com/components/grid/#basic-grid.
  */
 
@@ -487,6 +488,10 @@ const serviceEntityPage = (
 
     <EntityLayout.Route path="/todos" title="TODOs">
       <EntityTodoContent />
+    </EntityLayout.Route>
+
+    <EntityLayout.Route path="/costs" title="Costs">
+      <EntityCostInsightsContent />
     </EntityLayout.Route>
 
     <EntityLayout.Route

@@ -250,6 +250,7 @@ export interface DependencyGraphProps<NodeData, EdgeData>
   edgeRanks?: number;
   edges: DependencyEdge<EdgeData>[];
   edgeWeight?: number;
+  fit?: 'grow' | 'contain';
   labelOffset?: number;
   // Warning: (ae-unresolved-link) The @link reference could not be resolved: This type of declaration is not supported yet by the resolver
   labelPosition?: LabelPosition;
@@ -494,9 +495,6 @@ export type HeaderTabsClassKey =
 
 // @public (undocumented)
 export function HelpIcon(props: IconComponentProps): JSX.Element;
-
-// @public @deprecated
-export function HomepageTimer(_props: {}): JSX.Element | null;
 
 // Warning: (ae-forgotten-export) The symbol "Props" needs to be exported by the entry point index.d.ts
 //

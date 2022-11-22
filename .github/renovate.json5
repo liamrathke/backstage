@@ -1,6 +1,7 @@
 {
   labels: ['dependencies'],
   extends: ['config:base', ':disableDependencyDashboard', ':gitSignOff'],
+  postUpdateOptions: ['yarnDedupeHighest'],
   rangeStrategy: 'update-lockfile',
   // @elastic/elasticsearch is ignored due to licensing issues. See #10992
   ignoreDeps: ['@elastic/elasticsearch', 'event-source-polyfill'],
@@ -13,6 +14,11 @@
     {
       matchSourceUrlPrefixes: ['https://github.com/microsoft/rushstack'],
       groupName: 'API Extractor / Rush Stack monorepo packages',
+      rangeStrategy: 'replace',
+    },
+    {
+      matchSourceUrlPrefixes: ['https://github.com/gregberge/svgr'],
+      groupName: 'SVGR monorepo packages',
       rangeStrategy: 'replace',
     },
   ],

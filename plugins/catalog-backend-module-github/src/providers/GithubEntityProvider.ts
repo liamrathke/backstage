@@ -19,8 +19,8 @@ import { Config } from '@backstage/config';
 import {
   GithubCredentialsProvider,
   ScmIntegrations,
-  GitHubIntegrationConfig,
-  GitHubIntegration,
+  GithubIntegrationConfig,
+  GithubIntegration,
   SingleInstanceGithubCredentialsProvider,
 } from '@backstage/integration';
 import {
@@ -37,7 +37,7 @@ import {
   readProviderConfigs,
   GithubEntityProviderConfig,
 } from './GithubEntityProviderConfig';
-import { getOrganizationRepositories, Repository } from '../lib/github';
+import { getOrganizationRepositories, RepositoryResponse } from '../lib/github';
 import { satisfiesTopicFilter } from '../lib/util';
 
 /**
@@ -51,7 +51,7 @@ import { satisfiesTopicFilter } from '../lib/util';
 export class GithubEntityProvider implements EntityProvider {
   private readonly config: GithubEntityProviderConfig;
   private readonly logger: Logger;
-  private readonly integration: GitHubIntegrationConfig;
+  private readonly integration: GithubIntegrationConfig;
   private readonly scheduleFn: () => Promise<void>;
   private connection?: EntityProviderConnection;
   private readonly githubCredentialsProvider: GithubCredentialsProvider;
@@ -101,7 +101,7 @@ export class GithubEntityProvider implements EntityProvider {
 
   private constructor(
     config: GithubEntityProviderConfig,
-    integration: GitHubIntegration,
+    integration: GithubIntegration,
     logger: Logger,
     taskRunner: TaskRunner,
   ) {
@@ -175,9 +175,10 @@ export class GithubEntityProvider implements EntityProvider {
   }
 
   // go to the server and get all of the repositories
-  private async findCatalogFiles(): Promise<Repository[]> {
+  private async findCatalogFiles(): Promise<RepositoryResponse[]> {
     const organization = this.config.organization;
     const host = this.integration.host;
+    const catalogPath = this.config.catalogPath;
     const orgUrl = `https://${host}/${organization}`;
 
     const { headers } = await this.githubCredentialsProvider.getCredentials({
@@ -192,12 +193,22 @@ export class GithubEntityProvider implements EntityProvider {
     const { repositories } = await getOrganizationRepositories(
       client,
       organization,
+      catalogPath,
     );
+
+    if (this.config.validateLocationsExist) {
+      return repositories.filter(repository => {
+        return (
+          repository.catalogInfoFile?.__typename === 'Blob' &&
+          repository.catalogInfoFile.text !== ''
+        );
+      });
+    }
 
     return repositories;
   }
 
-  private matchesFilters(repositories: Repository[]) {
+  private matchesFilters(repositories: RepositoryResponse[]) {
     const repositoryFilter = this.config.filters?.repository;
     const topicFilters = this.config.filters?.topic;
 
@@ -215,7 +226,7 @@ export class GithubEntityProvider implements EntityProvider {
     return matchingRepositories;
   }
 
-  private createLocationUrl(repository: Repository): string {
+  private createLocationUrl(repository: RepositoryResponse): string {
     const branch =
       this.config.filters?.branch || repository.defaultBranchRef?.name || '-';
     const catalogFile = this.config.catalogPath.startsWith('/')

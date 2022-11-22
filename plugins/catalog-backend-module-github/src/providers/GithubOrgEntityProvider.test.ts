@@ -18,7 +18,7 @@ import { getVoidLogger } from '@backstage/backend-common';
 import { GroupEntity, UserEntity } from '@backstage/catalog-model';
 import {
   GithubCredentialsProvider,
-  GitHubIntegrationConfig,
+  GithubIntegrationConfig,
 } from '@backstage/integration';
 import { EntityProviderConnection } from '@backstage/plugin-catalog-backend';
 import { graphql } from '@octokit/graphql';
@@ -87,7 +87,7 @@ describe('GithubOrgEntityProvider', () => {
       };
 
       const logger = getVoidLogger();
-      const gitHubConfig: GitHubIntegrationConfig = {
+      const gitHubConfig: GithubIntegrationConfig = {
         host: 'https://github.com',
       };
 
@@ -163,6 +163,7 @@ describe('GithubOrgEntityProvider', () => {
                   picture: 'http://example.com/team.jpeg',
                 },
                 type: 'team',
+                members: ['a'],
               },
             },
             locationKey: 'github-org-provider:my-id',
